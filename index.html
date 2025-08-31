@@ -3,196 +3,288 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mini Quizlet</title>
-<style>
-body { font-family: Arial, sans-serif; background: #f5f5f5; display:flex; justify-content:center; align-items:center; min-height:100vh; margin:0; }
-.container { width:90%; max-width:600px; background:white; border-radius:15px; padding:20px; box-shadow:0 5px 15px rgba(0,0,0,0.2); }
-h1,h2{text-align:center;}
-.hidden{display:none;}
-.set{display:flex;align-items:center;justify-content:space-between;background:#eee;padding:10px;border-radius:10px;margin:10px 0;cursor:pointer;}
-.card-container{perspective:1000px;margin:20px 0;}
-.card{width:100%;height:200px;position:relative;transform-style:preserve-3d;transition:transform 0.6s;cursor:pointer;}
-.card.flipped{transform:rotateY(180deg);}
-.card-face{position:absolute;width:100%;height:100%;backface-visibility:hidden;border-radius:15px;display:flex;justify-content:center;align-items:center;font-size:18px;font-weight:bold;text-align:center;padding:10px;box-sizing:border-box;}
-.card-front{background:#fff;}
-.card-back{background:#f0f0f0;transform:rotateY(180deg);}
-.answer-buttons{display:flex;justify-content:space-between;margin-top:15px;}
-.answer-buttons button{flex:1;margin:0 5px;padding:10px;border:none;border-radius:10px;font-size:16px;cursor:pointer;}
-.correct{background:#a0e7a0;}
-.incorrect{background:#f28b82;}
-input{width:95%;margin:5px 0;padding:8px;font-size:16px;}
-button{padding:10px;margin-top:10px;cursor:pointer;border-radius:10px;border:none;}
-</style>
-</head>
-<body>
-<div class="container">
-
-<!-- Auth -->
-<div id="auth-screen">
-<h2>Connexion / Inscription</h2>
-<input type="email" id="email" placeholder="Email">
-<input type="password" id="password" placeholder="Mot de passe">
-<button onclick="signUp()">S'inscrire</button>
-<button onclick="signIn()">Se connecter</button>
-</div>
-
-<!-- Home -->
-<div id="home-screen" class="hidden">
-<h1>Mes Sets</h1>
-<button onclick="showSetEditor()">➕ Nouveau set</button>
-<button onclick="signOut()">🚪 Déconnexion</button>
-<div id="sets-list"></div>
-</div>
-
-<!-- Editor -->
-<div id="editor-screen" class="hidden">
-<h2>Créer / Modifier un Set</h2>
-<input type="text" id="set-title" placeholder="Titre du set"><br>
-<input type="text" id="set-subject" placeholder="Matière"><br>
-<div id="cards-editor"></div>
-<button onclick="addCardEditor()">➕ Ajouter une carte</button>
-<button onclick="saveSet()">💾 Sauvegarder</button>
-<button onclick="goHome()">🏠 Accueil</button>
-</div>
-
-<!-- Game -->
-<div id="game-screen" class="hidden">
-<h2 id="game-title"></h2>
-<div class="card-container">
-<div class="card" onclick="flipCard()">
-<div class="card-face card-front"><div id="card-question"></div></div>
-<div class="card-face card-back"><div id="card-answer"></div></div>
-</div>
-</div>
-<div class="answer-buttons">
-<button class="incorrect" onclick="markAnswer(false)">Mauvais</button>
-<button class="correct" onclick="markAnswer(true)">Bon</button>
-</div>
-</div>
-
-</div>
-
-<!-- Firebase SDK -->
+<title>Quizlet Multi‑Joueurs</title>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as fbSignOut } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
 import { getFirestore, collection, addDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
+// --- Configuration Firebase ---
 const firebaseConfig = {
-apiKey: "AIzaSyB66qfMVZJxnFN0h8d3NHjCgTzrrJpZu28",
-authDomain: "quizlet-7eec7.firebaseapp.com",
-projectId: "quizlet-7eec7",
-storageBucket: "quizlet-7eec7.appspot.com",
-messagingSenderId: "650458729476",
-appId: "1:650458729476:web:82876ae94a85ca0d2cb951"
+  apiKey: "AIzaSyB66qfMVZJxnFN0h8d3NHjCgTzrrJpZu28",
+  authDomain: "quizlet-7eec7.firebaseapp.com",
+  projectId: "quizlet-7eec7",
+  storageBucket: "quizlet-7eec7.appspot.com",
+  messagingSenderId: "650458729476",
+  appId: "1:650458729476:web:82876ae94a85ca0d2cb951"
 };
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-let sets = [];
+// --- Auth ---
+window.signUp = async () => {
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+  try {
+    await createUserWithEmailAndPassword(auth, email, password);
+    alert("Inscription réussie !");
+    loadSets();
+  } catch(e) { alert(e.message); }
+};
+
+window.signIn = async () => {
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+  try {
+    await signInWithEmailAndPassword(auth, email, password);
+    loadSets();
+  } catch(e) { alert(e.message); }
+};
+
+window.signOutUser = async () => {
+  await signOut(auth);
+  document.getElementById('auth-screen').classList.remove('hidden');
+  document.getElementById('home-screen').classList.add('hidden');
+};
+
+// --- Load Sets ---
+window.loadSets = async () => {
+  const user = auth.currentUser;
+  if(!user) return;
+  document.getElementById('auth-screen').classList.add('hidden');
+  document.getElementById('home-screen').classList.remove('hidden');
+  const q = query(collection(db,'sets'), where('uid','==',user.uid));
+  const snapshot = await getDocs(q);
+  const sets = [];
+  snapshot.forEach(doc => sets.push({ id: doc.id, ...doc.data() }));
+  displaySets(sets);
+};
+
+window.displaySets = (sets) => {
+  const list = document.getElementById('sets-list');
+  list.innerHTML = '';
+  sets.forEach((s, i) => {
+    const div = document.createElement('div');
+    div.className = 'set';
+    div.innerHTML = `
+      <img src="${s.image || 'https://via.placeholder.com/60'}">
+      <div><strong>${s.title}</strong><br><small>${s.subject}</small></div>
+      <div class="set-buttons">
+        <button onclick="editSet(${i});event.stopPropagation()">✏️ Modifier</button>
+        <button onclick="deleteSet(${i});event.stopPropagation()">🗑️ Supprimer</button>
+      </div>
+    `;
+    div.onclick = () => startGame(s);
+    list.appendChild(div);
+  });
+};
+
+// --- Create / Edit Sets ---
+let setsData = [];
 let currentSet = null;
+
+window.showSetEditor = () => {
+  document.getElementById('home-screen').classList.add('hidden');
+  document.getElementById('editor-screen').classList.remove('hidden');
+  document.getElementById('cards-editor').innerHTML = '';
+  currentSet = null;
+  addCardEditor();
+};
+
+window.editSet = (index) => {
+  currentSet = setsData[index];
+  document.getElementById('home-screen').classList.add('hidden');
+  document.getElementById('editor-screen').classList.remove('hidden');
+  document.getElementById('set-title').value = currentSet.title;
+  document.getElementById('set-subject').value = currentSet.subject;
+  document.getElementById('set-image').value = currentSet.image;
+  document.getElementById('cards-editor').innerHTML = '';
+  currentSet.cards.forEach(c => addCardEditor(c.question,c.answer,c.image));
+};
+
+window.addCardEditor = (q='', a='', img='') => {
+  const div = document.createElement('div');
+  div.className = 'card-editor';
+  div.innerHTML = `
+    <input placeholder="Question" value="${q}">
+    <input placeholder="Réponse" value="${a}">
+    <input placeholder="URL image" value="${img}">
+    <button onclick="this.parentElement.remove()">🗑️ Supprimer</button><hr>
+  `;
+  document.getElementById('cards-editor').appendChild(div);
+};
+
+window.saveSet = async () => {
+  const user = auth.currentUser;
+  const title = document.getElementById('set-title').value;
+  const subject = document.getElementById('set-subject').value;
+  const image = document.getElementById('set-image').value;
+  const cards = Array.from(document.querySelectorAll('#cards-editor > .card-editor')).map(div => ({
+    question: div.children[0].value,
+    answer: div.children[1].value,
+    image: div.children[2].value
+  }));
+
+  try {
+    if(currentSet){
+      // Pour simplifier, on crée toujours un nouveau doc
+      await addDoc(collection(db,'sets'), { uid:user.uid, title, subject, image, cards });
+    } else {
+      await addDoc(collection(db,'sets'), { uid:user.uid, title, subject, image, cards });
+    }
+    alert("Set sauvegardé !");
+    document.getElementById('editor-screen').classList.add('hidden');
+    loadSets();
+  } catch(e){ alert(e.message); }
+};
+
+window.deleteSet = async (i) => {
+  if(!confirm("Supprimer ce set ?")) return;
+  const user = auth.currentUser;
+  const q = query(collection(db,'sets'), where('uid','==',user.uid));
+  const snapshot = await getDocs(q);
+  let idx = 0;
+  snapshot.forEach(doc => {
+    if(idx===i) doc.ref.delete();
+    idx++;
+  });
+  loadSets();
+};
+
+// --- Game ---
 let currentCards = [];
 let currentIndex = 0;
 let errors = [];
 
-// --- Auth ---
-function signUp(){
-const email=document.getElementById("email").value;
-const password=document.getElementById("password").value;
-createUserWithEmailAndPassword(auth,email,password)
-.then(()=>{alert("Compte créé !")})
-.catch(e=>alert(e.message));
-}
+window.startGame = (set) => {
+  currentCards = [...set.cards];
+  currentIndex = 0;
+  errors = [];
+  document.getElementById('home-screen').classList.add('hidden');
+  document.getElementById('game-screen').classList.remove('hidden');
+  document.getElementById('game-title').textContent = set.title;
+  showCard();
+};
 
-function signIn(){
-const email=document.getElementById("email").value;
-const password=document.getElementById("password").value;
-signInWithEmailAndPassword(auth,email,password)
-.then(()=>loadSets())
-.catch(e=>alert(e.message));
-}
+window.showCard = () => {
+  const card = currentCards[currentIndex];
+  document.getElementById('card-question').textContent = card.question;
+  document.getElementById('card-answer').textContent = card.answer;
+  document.getElementById('card-image-front').src = card.image || '';
+  document.getElementById('card-image-back').src = card.image || '';
+  document.querySelector(".card").classList.remove("flipped");
+};
 
-function signOut(){
-fbSignOut(auth).then(()=>{
-document.getElementById("auth-screen").classList.remove("hidden");
-document.getElementById("home-screen").classList.add("hidden");
-});
-}
+window.flipCard = () => document.querySelector(".card").classList.toggle("flipped");
 
-// --- Sets ---
-async function loadSets(){
-sets=[];
-document.getElementById("auth-screen").classList.add("hidden");
-document.getElementById("home-screen").classList.remove("hidden");
-const user = auth.currentUser;
-const q = query(collection(db,"sets"),where("uid","==",user.uid));
-const querySnapshot = await getDocs(q);
-querySnapshot.forEach(doc=>{
-sets.push({...doc.data(), id:doc.id});
-});
-displaySets();
-}
+window.markAnswer = (correct) => {
+  if(!correct) errors.push(currentCards[currentIndex]);
+  currentIndex++;
+  if(currentIndex < currentCards.length) showCard();
+  else endGame();
+};
 
-function displaySets(){
-const list=document.getElementById("sets-list");
-list.innerHTML="";
-sets.forEach((s,i)=>{
-const div=document.createElement("div");
-div.className="set";
-div.textContent=`${s.title} (${s.subject})`;
-div.onclick=()=>startGame(s);
-list.appendChild(div);
-});
-}
+window.endGame = () => {
+  document.getElementById('game-screen').classList.add('hidden');
+  document.getElementById('score-screen').classList.remove('hidden');
+  document.getElementById('final-score').textContent = `Score: ${currentCards.length - errors.length}/${currentCards.length}`;
+};
 
-function showSetEditor(){
-document.getElementById("home-screen").classList.add("hidden");
-document.getElementById("editor-screen").classList.remove("hidden");
-document.getElementById("cards-editor").innerHTML="";
-currentSet=null;
-}
+window.restartAll = () => {
+  currentIndex=0;
+  currentCards=[...currentSet.cards];
+  errors=[];
+  document.getElementById('score-screen').classList.add('hidden');
+  document.getElementById('game-screen').classList.remove('hidden');
+  showCard();
+};
 
-function addCardEditor(q="",a=""){
-const div=document.createElement("div");
-div.innerHTML=`<input placeholder="Question" value="${q}"><input placeholder="Réponse" value="${a}"><button onclick="this.parentElement.remove()">🗑️ Supprimer</button><hr>`;
-document.getElementById("cards-editor").appendChild(div);
-}
-
-async function saveSet(){
-const title=document.getElementById("set-title").value;
-const subject=document.getElementById("set-subject").value;
-const cards=Array.from(document.querySelectorAll("#cards-editor > div")).map(div=>({question:div.children[0].value,answer:div.children[1].value}));
-const user = auth.currentUser;
-await addDoc(collection(db,"sets"),{title,subject,cards,uid:user.uid});
-goHome();
-}
-
-function goHome(){document.getElementById("editor-screen").classList.add("hidden");loadSets();}
-
-// --- Game ---
-function startGame(set){
-currentSet=set;
-currentCards=[...set.cards];
-currentIndex=0;
-errors=[];
-document.getElementById("home-screen").classList.add("hidden");
-document.getElementById("game-screen").classList.remove("hidden");
-document.getElementById("game-title").textContent=set.title;
-showCard();
-}
-
-function showCard(){
-const card=currentCards[currentIndex];
-document.getElementById("card-question").textContent=card.question;
-document.getElementById("card-answer").textContent=card.answer;
-document.querySelector(".card").classList.remove("flipped");
-}
-
-function flipCard(){document.querySelector(".card").classList.toggle("flipped");}
-function markAnswer(correct){if(!correct) errors.push(currentCards[currentIndex]);currentIndex++;if(currentIndex<currentCards.length) showCard();else alert("Fin du set !");}
-
+window.restartErrors = () => {
+  if(errors.length===0){ alert("Aucune erreur à rejouer !"); return; }
+  currentCards = [...errors];
+  currentIndex = 0;
+  errors = [];
+  document.getElementById('score-screen').classList.add('hidden');
+  document.getElementById('game-screen').classList.remove('hidden');
+  showCard();
+};
 </script>
+
+<style>
+body{margin:0;font-family:Arial,sans-serif;background:#f5f5f5;display:flex;justify-content:center;align-items:center;min-height:100vh}
+.container{width:90%;max-width:800px;background:white;padding:20px;border-radius:15px}
+.hidden{display:none}
+input{width:95%;padding:8px;margin:5px 0}
+button{padding:8px;margin:5px;cursor:pointer}
+.set{display:flex;align-items:center;background:#eee;margin:10px 0;padding:10px;border-radius:10px;cursor:pointer}
+.set img{width:50px;height:50px;margin-right:10px;border-radius:10px}
+.card-container{perspective:1000px}
+.card{width:100%;height:200px;position:relative;transform-style:preserve-3d;transition:transform 0.6s;cursor:pointer;margin:20px 0}
+.card.flipped{transform:rotateY(180deg)}
+.card-face{position:absolute;width:100%;height:100%;backface-visibility:hidden;display:flex;flex-direction:column;justify-content:center;align-items:center;border-radius:15px;padding:10px;box-sizing:border-box;font-weight:bold;text-align:center}
+.card-back{transform:rotateY(180deg);background:#f0f0f0}
+.card-face img{max-width:100%;max-height:100px;margin-bottom:10px;object-fit:contain}
+.answer-buttons{display:flex;justify-content:space-between}
+.answer-buttons button{flex:1;margin:0 5px;padding:10px;border:none;border-radius:12px;font-size:16px;transition:0.3s}
+.correct{background:#a0e7a0}.incorrect{background:#f28b82}.correct:hover{background:#77d677}.incorrect:hover{background:#e06666}
+</style>
+
+<body>
+<div class="container">
+  <div id="auth-screen">
+    <h2>Connexion / Inscription</h2>
+    <input id="email" type="email" placeholder="Email">
+    <input id="password" type="password" placeholder="Mot de passe">
+    <button onclick="signUp()">S'inscrire</button>
+    <button onclick="signIn()">Se connecter</button>
+  </div>
+
+  <div id="home-screen" class="hidden">
+    <h1>Mes Sets</h1>
+    <button onclick="showSetEditor()">➕ Nouveau set</button>
+    <button onclick="signOutUser()">🚪 Déconnexion</button>
+    <div id="sets-list"></div>
+  </div>
+
+  <div id="editor-screen" class="hidden">
+    <h2>Créer / Modifier un Set</h2>
+    <input id="set-title" type="text" placeholder="Titre du set"><br>
+    <input id="set-subject" type="text" placeholder="Matière"><br>
+    <input id="set-image" type="text" placeholder="URL image pour l'accueil"><br>
+    <div id="cards-editor"></div>
+    <button onclick="addCardEditor()">➕ Ajouter une carte</button>
+    <button onclick="saveSet()">💾 Sauvegarder</button>
+  </div>
+
+  <div id="game-screen" class="hidden">
+    <h2 id="game-title"></h2>
+    <div class="card-container">
+      <div class="card" onclick="flipCard()">
+        <div class="card-face card-front">
+          <img id="card-image-front" alt="">
+          <div id="card-question"></div>
+        </div>
+        <div class="card-face card-back">
+          <img id="card-image-back" alt="">
+          <div id="card-answer"></div>
+        </div>
+      </div>
+    </div>
+    <div class="answer-buttons">
+      <button class="incorrect" onclick="markAnswer(false)">Mauvais</button>
+      <button class="correct" onclick="markAnswer(true)">Bon</button>
+    </div>
+  </div>
+
+  <div id="score-screen" class="hidden">
+    <h2>Résultat</h2>
+    <p id="final-score"></p>
+    <button onclick="restartAll()">🔄 Recommencer tout</button>
+    <button onclick="restartErrors()">❌ Rejouer erreurs</button>
+    <button onclick="loadSets()">🏠 Accueil</button>
+  </div>
+</div>
 </body>
 </html>
