@@ -79,7 +79,7 @@ button { padding: 10px; margin-top: 10px; cursor: pointer; border-radius: 10px; 
 <script>
 // --- Supabase setup ---
 const supabaseUrl = 'https://xiivahdidcwvqobbfocs.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpaXZhaGRpZGN3dnFvYmJmb2NzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY2NDY1MjUsImV4cCI6MjA3MjIyMjUyNX0.-mbGjr5xo6ruJdTp8kfQqe3KksU5LaOP48upSz6sc3I';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53a3lyeXJzZm92Z2FhaGRya2VrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY2NTY1MDMsImV4cCI6MjA3MjIzMjUwM30.JW7neIhQIP9JrVeOPWJ5QoHqDVWTwSnwEAcTvJp5SZw';
 const supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
 // --- Auth functions ---
@@ -107,10 +107,13 @@ async function signOut() {
 
 // --- Load sets ---
 async function loadSets() {
-  const user = supabase.auth.getUser();
+  const { data: userData } = await supabase.auth.getUser();
+  if(!userData.user) return;
+
   document.getElementById('auth-screen').classList.add('hidden');
   document.getElementById('home-screen').classList.remove('hidden');
-  const { data, error } = await supabase.from('sets').select('*');
+
+  const { data, error } = await supabase.from('sets').select('*').eq('user_id', userData.user.id);
   if(error) alert(error.message);
   displaySets(data || []);
 }
@@ -119,7 +122,7 @@ async function loadSets() {
 function displaySets(sets) {
   const list = document.getElementById('sets-list');
   list.innerHTML = '';
-  sets.forEach((s, i) => {
+  sets.forEach((s) => {
     const div = document.createElement('div');
     div.className = 'set';
     div.textContent = `${s.title} (${s.subject})`;
@@ -152,7 +155,11 @@ async function saveSet() {
   const cards = Array.from(document.querySelectorAll('#cards-editor > div')).map(div => {
     return { question: div.children[0].value, answer: div.children[1].value };
   });
-  const { error } = await supabase.from('sets').insert([{ title, subject, image, cards }]);
+
+  const { data: userData } = await supabase.auth.getUser();
+  if(!userData.user) return alert("Erreur : utilisateur non connecté");
+
+  const { error } = await supabase.from('sets').insert([{ title, subject, image, cards, user_id: userData.user.id }]);
   if(error) alert(error.message);
   else goHome();
 }
