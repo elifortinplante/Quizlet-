@@ -68,9 +68,8 @@
     .card-face img { max-width: 100%; max-height: 150px; margin-bottom: 15px; object-fit: contain; }
     .answer-buttons { display: flex; justify-content: space-between; margin-top: 20px; }
     .answer-buttons button {
-      flex: 1; margin: 0 5px; padding: 10px;
-      font-size: 18px; border: none; border-radius: 12px;
-      cursor: pointer; transition: 0.3s;
+      flex: 1; margin: 0 5px; padding: 10px; font-size: 18px;
+      border: none; border-radius: 12px; cursor: pointer; transition: 0.3s;
     }
     .correct { background: #a0e7a0; }
     .incorrect { background: #f28b82; }
@@ -78,10 +77,9 @@
     .incorrect:hover { background: #e06666; }
     #score-screen { text-align: center; }
     #score-screen button {
-      margin: 10px; padding: 12px 20px;
-      font-size: 16px; border: none; border-radius: 12px;
-      cursor: pointer; background: #a18cd1; color: white;
-      transition: 0.3s;
+      margin: 10px; padding: 12px 20px; font-size: 16px;
+      border: none; border-radius: 12px; cursor: pointer;
+      background: #a18cd1; color: white; transition: 0.3s;
     }
     #score-screen button:hover { background: #875fb3; }
     .card-editor { margin-bottom: 10px; }
@@ -137,151 +135,163 @@
 </div>
 
 <script type="module">
-  // Import Firebase
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-  import { getFirestore, collection, getDocs, addDoc, updateDoc, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyB66qfMVZJxnFN0h8d3NHjCgTzrrJpZu28",
-    authDomain: "quizlet-7eec7.firebaseapp.com",
-    projectId: "quizlet-7eec7",
-    storageBucket: "quizlet-7eec7.appspot.com",
-    messagingSenderId: "650458729476",
-    appId: "1:650458729476:web:82876ae94a85ca0d2cb951"
-  };
+const firebaseConfig = {
+  apiKey: "AIzaSyB66qfMVZJxnFN0h8d3NHjCgTzrrJpZu28",
+  authDomain: "quizlet-7eec7.firebaseapp.com",
+  projectId: "quizlet-7eec7",
+  storageBucket: "quizlet-7eec7.appspot.com",
+  messagingSenderId: "650458729476",
+  appId: "1:650458729476:web:82876ae94a85ca0d2cb951"
+};
 
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
-  const setsCollection = collection(db, "sets");
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const setsCol = collection(db, "sets");
 
-  let sets = [];
-  let currentSet = null;
-  let currentCards = [];
-  let currentIndex = 0;
-  let errors = [];
+let sets = [];
+let currentSet = null;
+let currentCards = [];
+let currentIndex = 0;
+let errors = [];
 
-  async function loadSets() {
-    sets = [];
-    const snapshot = await getDocs(setsCollection);
-    snapshot.forEach(docSnap => {
-      const data = docSnap.data();
-      sets.push({ id: docSnap.id, ...data });
+async function fetchSets() {
+  const snapshot = await getDocs(setsCol);
+  sets = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+  displaySets();
+}
+
+async function saveSetsFirestore() {
+  if(currentSet.id){
+    await setDoc(doc(db, "sets", currentSet.id), {
+      title: currentSet.title,
+      subject: currentSet.subject,
+      image: currentSet.image,
+      cards: currentSet.cards
     });
-    displaySets();
+  } else {
+    const newDoc = doc(setsCol);
+    currentSet.id = newDoc.id;
+    await setDoc(newDoc, currentSet);
   }
+  await fetchSets();
+}
 
-  async function saveSet() {
-    const title = document.getElementById("set-title").value;
-    const subject = document.getElementById("set-subject").value;
-    const image = document.getElementById("set-image").value;
-    const cards = [];
-    const cardDivs = document.querySelectorAll("#cards-editor > .card-editor");
-    cardDivs.forEach(div => {
-      const q = div.children[0].value;
-      const a = div.children[1].value;
-      const img = div.children[2].value;
-      if(q && a) cards.push({ question: q, answer: a, image: img });
-    });
-
-    if(currentSet) {
-      const docRef = doc(db, "sets", currentSet.id);
-      await updateDoc(docRef, { title, subject, image, cards });
-    } else {
-      await addDoc(setsCollection, { title, subject, image, cards });
-    }
-    goHome();
+async function deleteSetFirestore(i){
+  if(confirm("Supprimer ce set ?")){
+    await deleteDoc(doc(db, "sets", sets[i].id));
+    await fetchSets();
   }
+}
 
-  function goHome() {
-    document.querySelectorAll(".container > div").forEach(div => div.classList.add("hidden"));
-    document.getElementById("home-screen").classList.remove("hidden");
-    loadSets();
+function goHome() {
+  document.querySelectorAll(".container > div").forEach(div => div.classList.add("hidden"));
+  document.getElementById("home-screen").classList.remove("hidden");
+  fetchSets();
+}
+
+function showSetEditor(setIndex=null) {
+  document.querySelectorAll(".container > div").forEach(div => div.classList.add("hidden"));
+  document.getElementById("editor-screen").classList.remove("hidden");
+  document.getElementById("cards-editor").innerHTML = "";
+
+  if(setIndex !== null){
+    currentSet = {...sets[setIndex]};
+    document.getElementById("set-title").value = currentSet.title;
+    document.getElementById("set-subject").value = currentSet.subject;
+    document.getElementById("set-image").value = currentSet.image;
+    currentSet.cards.forEach(c => addCardEditor(c.question, c.answer, c.image));
+  } else {
+    currentSet = { cards: [] };
   }
+}
 
-  function showSetEditor(setIndex=null) {
-    document.querySelectorAll(".container > div").forEach(div => div.classList.add("hidden"));
-    document.getElementById("editor-screen").classList.remove("hidden");
-    document.getElementById("cards-editor").innerHTML = "";
-    if(setIndex !== null){
-      currentSet = sets[setIndex];
-      document.getElementById("set-title").value = currentSet.title;
-      document.getElementById("set-subject").value = currentSet.subject;
-      document.getElementById("set-image").value = currentSet.image;
-      currentSet.cards.forEach(c => addCardEditor(c.question, c.answer, c.image));
-    } else currentSet = null;
-  }
+function addCardEditor(q='', a='', img='') {
+  const div = document.createElement("div");
+  div.className = "card-editor";
+  div.innerHTML = `
+    <input type="text" placeholder="Question" value="${q}">
+    <input type="text" placeholder="Réponse" value="${a}">
+    <input type="text" placeholder="URL image" value="${img}">
+    <button class="btn-del-card">🗑️ Supprimer cette carte</button>
+    <hr>
+  `;
+  document.getElementById("cards-editor").appendChild(div);
 
-  function addCardEditor(q='', a='', img='') {
-    const div = document.createElement("div");
-    div.className = "card-editor";
-    div.innerHTML = `
-      <input type="text" placeholder="Question" value="${q}">
-      <input type="text" placeholder="Réponse" value="${a}">
-      <input type="text" placeholder="URL image" value="${img}">
-      <button class="btn-del-card">🗑️ Supprimer cette carte</button>
-      <hr>
-    `;
-    document.getElementById("cards-editor").appendChild(div);
-    div.querySelector(".btn-del-card").onclick = () => div.remove();
-  }
+  div.querySelector(".btn-del-card").onclick = () => div.remove();
+}
 
-  function displaySets() {
-    const list = document.getElementById("sets-list");
-    list.innerHTML = "";
-    sets.forEach((s, i) => {
-      const div = document.createElement("div");
-      div.className = "set";
-      div.innerHTML = `
-        <img src="${s.image || 'https://via.placeholder.com/60'}">
-        <div><strong>${s.title}</strong><br><small>${s.subject}</small></div>
-        <div class="set-buttons">
-          <button onclick="showSetEditor(${i});event.stopPropagation()">✏️ Modifier</button>
-          <button onclick="deleteSet(${i});event.stopPropagation()">🗑️ Supprimer</button>
-        </div>
-      `;
-      div.onclick = () => startGame(i);
-      list.appendChild(div);
-    });
-  }
+async function saveSet() {
+  currentSet.title = document.getElementById("set-title").value;
+  currentSet.subject = document.getElementById("set-subject").value;
+  currentSet.image = document.getElementById("set-image").value;
 
-  async function deleteSet(i){
-    if(confirm("Supprimer ce set ?")){
-      await deleteDoc(doc(db, "sets", sets[i].id));
-      goHome();
-    }
-  }
+  const cardDivs = document.querySelectorAll("#cards-editor > .card-editor");
+  currentSet.cards = [];
+  cardDivs.forEach(div => {
+    const q = div.children[0].value;
+    const a = div.children[1].value;
+    const img = div.children[2].value;
+    if(q && a) currentSet.cards.push({ question: q, answer: a, image: img });
+  });
 
-  function startGame(i) {
-    currentSet = sets[i];
-    currentCards = [...currentSet.cards];
-    currentIndex = 0;
-    errors = [];
-    document.querySelectorAll(".container > div").forEach(div => div.classList.add("hidden"));
-    document.getElementById("game-screen").classList.remove("hidden");
-    document.getElementById("game-title").textContent = currentSet.title;
-    showCard();
-  }
-
-  function showCard() {
-    const card = currentCards[currentIndex];
-    document.getElementById("card-question").textContent = card.question;
-    document.getElementById("card-answer").textContent = card.answer;
-    document.getElementById("card-image-front").src = card.image || "";
-    document.getElementById("card-image-back").src = card.image || "";
-    document.querySelector(".card").classList.remove("flipped");
-  }
-
-  function flipCard() { document.querySelector(".card").classList.toggle("flipped"); }
-  function markAnswer(correct) { if(!correct) errors.push(currentCards[currentIndex]); currentIndex++; if(currentIndex < currentCards.length) showCard(); else endGame(); }
-  function endGame() {
-    document.querySelectorAll(".container > div").forEach(div => div.classList.add("hidden"));
-    document.getElementById("score-screen").classList.remove("hidden");
-    document.getElementById("final-score").textContent = `Score: ${currentCards.length - errors.length}/${currentCards.length}`;
-  }
-  function restartAll() { currentCards = [...currentSet.cards]; currentIndex = 0; errors = []; document.querySelectorAll(".container > div").forEach(div => div.classList.add("hidden")); document.getElementById("game-screen").classList.remove("hidden"); showCard(); }
-  function restartErrors() { if(errors.length === 0){ alert("Aucune erreur à rejouer !"); return; } currentCards = [...errors]; currentIndex = 0; errors = []; document.querySelectorAll(".container > div").forEach(div => div.classList.add("hidden")); document.getElementById("game-screen").classList.remove("hidden"); showCard(); }
-
+  await saveSetsFirestore();
+  currentSet = null;
   goHome();
+}
+
+function displaySets() {
+  const list = document.getElementById("sets-list");
+  list.innerHTML = "";
+  sets.forEach((s, i) => {
+    const div = document.createElement("div");
+    div.className = "set";
+    div.innerHTML = `
+      <img src="${s.image || 'https://via.placeholder.com/60'}">
+      <div><strong>${s.title}</strong><br><small>${s.subject}</small></div>
+      <div class="set-buttons">
+        <button onclick="showSetEditor(${i});event.stopPropagation()">✏️ Modifier</button>
+        <button onclick="deleteSetFirestore(${i});event.stopPropagation()">🗑️ Supprimer</button>
+      </div>
+    `;
+    div.onclick = () => startGame(i);
+    list.appendChild(div);
+  });
+}
+
+function startGame(i) {
+  currentSet = sets[i];
+  currentCards = [...currentSet.cards];
+  currentIndex = 0;
+  errors = [];
+  document.querySelectorAll(".container > div").forEach(div => div.classList.add("hidden"));
+  document.getElementById("game-screen").classList.remove("hidden");
+  document.getElementById("game-title").textContent = currentSet.title;
+  showCard();
+}
+
+function showCard() {
+  const card = currentCards[currentIndex];
+  document.getElementById("card-question").textContent = card.question;
+  document.getElementById("card-answer").textContent = card.answer;
+  document.getElementById("card-image-front").src = card.image || "";
+  document.getElementById("card-image-back").src = card.image || "";
+  document.querySelector(".card").classList.remove("flipped");
+}
+
+function flipCard() { document.querySelector(".card").classList.toggle("flipped"); }
+function markAnswer(correct){ if(!correct) errors.push(currentCards[currentIndex]); currentIndex++; currentIndex<currentCards.length?showCard():endGame();}
+function endGame(){
+  document.querySelectorAll(".container > div").forEach(div=>div.classList.add("hidden"));
+  document.getElementById("score-screen").classList.remove("hidden");
+  document.getElementById("final-score").textContent=`Score: ${currentCards.length-errors.length}/${currentCards.length}`;
+}
+function restartAll(){ currentCards=[...currentSet.cards]; currentIndex=0; errors=[]; document.querySelectorAll(".container > div").forEach(div=>div.classList.add("hidden")); document.getElementById("game-screen").classList.remove("hidden"); showCard();}
+function restartErrors(){ if(errors.length===0){ alert("Aucune erreur à rejouer !"); return;} currentCards=[...errors]; currentIndex=0; errors=[]; document.querySelectorAll(".container > div").forEach(div=>div.classList.add("hidden")); document.getElementById("game-screen").classList.remove("hidden"); showCard(); }
+
+fetchSets();
 </script>
 </body>
 </html>
