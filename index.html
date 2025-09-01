@@ -3,81 +3,52 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mini Quizlet Multi-compte</title>
+<title>Quizlet Multi-utilisateur</title>
 <style>
-  body { font-family: Arial, sans-serif; background: #f5f5f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-  .container { width: 90%; max-width: 600px; background: white; border-radius: 15px; padding: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
-  h1,h2 { text-align:center; color:#333; }
-  .hidden { display:none; }
-  .set { display:flex; align-items:center; justify-content:space-between; background:#eee; padding:10px; border-radius:10px; margin:10px 0; cursor:pointer; }
-  .card-container { perspective:1000px; margin:20px 0; }
-  .card { width:100%; height:200px; position:relative; transform-style: preserve-3d; transition: transform 0.6s; cursor:pointer; }
-  .card.flipped { transform: rotateY(180deg); }
-  .card-face { position:absolute; width:100%; height:100%; backface-visibility:hidden; border-radius:15px; display:flex; justify-content:center; align-items:center; font-size:18px; font-weight:bold; text-align:center; padding:10px; box-sizing:border-box; }
-  .card-front { background:#fff; }
-  .card-back { background:#f0f0f0; transform:rotateY(180deg); }
-  .answer-buttons { display:flex; justify-content:space-between; margin-top:15px; }
-  .answer-buttons button { flex:1; margin:0 5px; padding:10px; border:none; border-radius:10px; font-size:16px; cursor:pointer; }
-  .correct { background:#a0e7a0; }
-  .incorrect { background:#f28b82; }
-  input { width:95%; margin:5px 0; padding:8px; font-size:16px; }
-  button { padding:10px; margin-top:10px; cursor:pointer; border-radius:10px; border:none; }
+body { margin:0; font-family: Arial,sans-serif; background:#f5f5f5; display:flex; justify-content:center; align-items:center; min-height:100vh;}
+.container { width:90%; max-width:700px; background:white; border-radius:15px; padding:20px; box-shadow:0 5px 15px rgba(0,0,0,0.2);}
+h1,h2 { text-align:center; }
+.hidden { display:none; }
+.set { display:flex; align-items:center; justify-content:space-between; background:#eee; padding:10px; border-radius:10px; margin:10px 0; cursor:pointer;}
+.card-container { perspective:1000px; margin:20px 0;}
+.card { width:100%; height:200px; position:relative; transform-style:preserve-3d; transition: transform 0.6s; cursor:pointer;}
+.card.flipped { transform: rotateY(180deg);}
+.card-face { position:absolute; width:100%; height:100%; backface-visibility:hidden; border-radius:15px; display:flex; justify-content:center; align-items:center; text-align:center; font-weight:bold; padding:10px; box-sizing:border-box;}
+.card-front { background:#fff;}
+.card-back { background:#f0f0f0; transform:rotateY(180deg);}
+.answer-buttons { display:flex; justify-content:space-between; margin-top:15px;}
+.answer-buttons button { flex:1; margin:0 5px; padding:10px; border:none; border-radius:10px; cursor:pointer;}
+.correct { background:#a0e7a0;}
+.incorrect { background:#f28b82;}
+input { width:95%; margin:5px 0; padding:8px; font-size:16px;}
+button { padding:10px; margin-top:10px; cursor:pointer; border-radius:10px; border:none;}
 </style>
-</head>
-<body>
-<div class="container">
-  <!-- Auth screens -->
-  <div id="auth-screen">
-    <h2>Connexion / Inscription</h2>
-    <input type="email" id="email" placeholder="Email">
-    <input type="password" id="password" placeholder="Mot de passe">
-    <button onclick="signUp()">S'inscrire</button>
-    <button onclick="signIn()">Se connecter</button>
-  </div>
+<script type="module">
+// Firebase SDK
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+import { getFirestore, collection, addDoc, getDocs, updateDoc, doc, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 
-  <!-- Home screen -->
-  <div id="home-screen" class="hidden">
-    <h1>Mes Sets</h1>
-    <button onclick="showSetEditor()">➕ Nouveau set</button>
-    <button onclick="signOut()">🚪 Déconnexion</button>
-    <div id="sets-list"></div>
-  </div>
+// Config Firebase avec tes clés
+const firebaseConfig = {
+  apiKey: "AIzaSyB66qfMVZJxnFN0h8d3NHjCgTzrrJpZu28",
+  authDomain: "quizlet-7eec7.firebaseapp.com",
+  projectId: "quizlet-7eec7",
+  storageBucket: "quizlet-7eec7.appspot.com",
+  messagingSenderId: "650458729476",
+  appId: "1:650458729476:web:82876ae94a85ca0d2cb951"
+};
 
-  <!-- Set editor -->
-  <div id="editor-screen" class="hidden">
-    <h2>Créer / Modifier un Set</h2>
-    <input type="text" id="set-title" placeholder="Titre du set"><br>
-    <input type="text" id="set-subject" placeholder="Matière"><br>
-    <input type="text" id="set-image" placeholder="URL image pour le set"><br>
-    <div id="cards-editor"></div>
-    <button onclick="addCardEditor()">➕ Ajouter une carte</button><br>
-    <button onclick="saveSet()">💾 Sauvegarder</button>
-    <button onclick="goHome()">🏠 Accueil</button>
-  </div>
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-  <!-- Game screen -->
-  <div id="game-screen" class="hidden">
-    <h2 id="game-title"></h2>
-    <div class="card-container">
-      <div class="card" onclick="flipCard()">
-        <div class="card-face card-front"><div id="card-question"></div></div>
-        <div class="card-face card-back"><div id="card-answer"></div></div>
-      </div>
-    </div>
-    <div class="answer-buttons">
-      <button class="incorrect" onclick="markAnswer(false)">Mauvais</button>
-      <button class="correct" onclick="markAnswer(true)">Bon</button>
-    </div>
-  </div>
-</div>
-
-<script>
-// --- Supabase setup ---
-const supabaseUrl = 'https://xiivahdidcwvqobbfocs.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpaXZhaGRpZGN3dnFvYmJmb2NzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY2NDY1MjUsImV4cCI6MjA3MjIyMjUyNX0.-mbGjr5xo6ruJdTp8kfQqe3KksU5LaOP48upSz6sc3I';
-const supabase = supabase.createClient(supabaseUrl, supabaseKey);
-
-let sets = [];
+// --- Screens ---
+const authScreen = document.getElementById('auth-screen');
+const homeScreen = document.getElementById('home-screen');
+const editorScreen = document.getElementById('editor-screen');
+const gameScreen = document.getElementById('game-screen');
+const setsList = document.getElementById('sets-list');
 let currentSet = null;
 let currentCards = [];
 let currentIndex = 0;
@@ -87,88 +58,150 @@ let errors = [];
 async function signUp() {
   const email = document.getElementById('email').value;
   const password = document.getElementById('password').value;
-  const { error } = await supabase.auth.signUp({ email, password });
-  if(error) alert(error.message);
-  else alert("Email envoyé pour vérification !");
+  try {
+    await createUserWithEmailAndPassword(auth, email, password);
+    alert("Inscription réussie !");
+  } catch(e) { alert(e.message); }
 }
 
 async function signIn() {
   const email = document.getElementById('email').value;
   const password = document.getElementById('password').value;
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if(error) alert(error.message);
-  else loadSets();
+  try {
+    await signInWithEmailAndPassword(auth, email, password);
+  } catch(e) { alert(e.message); }
 }
 
-async function signOut() {
-  await supabase.auth.signOut();
-  document.getElementById('auth-screen').classList.remove('hidden');
-  document.getElementById('home-screen').classList.add('hidden');
+async function logout() {
+  await signOut(auth);
+  authScreen.classList.remove('hidden');
+  homeScreen.classList.add('hidden');
 }
 
 // --- Load sets ---
 async function loadSets() {
-  const { data: userData } = await supabase.auth.getUser();
-  if(!userData.user) return;
-  document.getElementById('auth-screen').classList.add('hidden');
-  document.getElementById('home-screen').classList.remove('hidden');
-  const { data, error } = await supabase.from('sets').select('*').eq('user_id', userData.user.id);
-  if(error) alert(error.message);
-  sets = data || [];
-  displaySets();
-}
-
-// --- Display sets ---
-function displaySets() {
-  const list = document.getElementById('sets-list');
-  list.innerHTML = '';
-  sets.forEach((s,i) => {
+  setsList.innerHTML = '';
+  const q = query(collection(db, "sets"), where("uid", "==", auth.currentUser.uid));
+  const snapshot = await getDocs(q);
+  snapshot.forEach(docSnap => {
+    const s = docSnap.data();
+    s.id = docSnap.id;
     const div = document.createElement('div');
     div.className = 'set';
-    div.textContent = `${s.title} (${s.subject})`;
-    div.onclick = () => startGame(i);
-    list.appendChild(div);
+    div.textContent = s.title + " (" + s.subject + ")";
+    div.onclick = () => startGame(s);
+    setsList.appendChild(div);
   });
 }
 
 // --- Editor ---
-function showSetEditor(setIndex=null) {
-  document.querySelectorAll(".container > div").forEach(div=>div.classList.add("hidden"));
-  document.getElementById("editor-screen").classList.remove("hidden");
-  document.getElementById("cards-editor").innerHTML="";
-
-  if(setIndex !== null){
-    currentSet = sets[setIndex];
-    currentSet.index = setIndex;
-    document.getElementById("set-title").value = currentSet.title;
-    document.getElementById("set-subject").value = currentSet.subject;
-    document.getElementById("set-image").value = currentSet.image;
-    currentSet.cards.forEach(c=>addCardEditor(c.question,c.answer));
-  } else currentSet = null;
+function showSetEditor(set=null) {
+  homeScreen.classList.add('hidden');
+  editorScreen.classList.remove('hidden');
+  document.getElementById('cards-editor').innerHTML = '';
+  currentSet = set;
+  if(set && set.cards) set.cards.forEach(c => addCardEditor(c.question, c.answer));
 }
 
-function addCardEditor(q='',a='') {
-  const div=document.createElement("div");
-  div.innerHTML=`<input placeholder="Question" value="${q}"><input placeholder="Réponse" value="${a}"><button onclick="this.parentElement.remove()">🗑️ Supprimer</button><hr>`;
-  document.getElementById("cards-editor").appendChild(div);
+function addCardEditor(q='', a='') {
+  const div = document.createElement('div');
+  div.innerHTML = `<input placeholder="Question" value="${q}"><input placeholder="Réponse" value="${a}"><button onclick="this.parentElement.remove()">Supprimer</button><hr>`;
+  document.getElementById('cards-editor').appendChild(div);
 }
 
 async function saveSet() {
-  const title=document.getElementById("set-title").value;
-  const subject=document.getElementById("set-subject").value;
-  const cards=Array.from(document.querySelectorAll("#cards-editor > div")).map(div=>({question:div.children[0].value,answer:div.children[1].value}));
-  const { data: userData } = await supabase.auth.getUser();
-  if(!userData.user) return alert("Connectez-vous d'abord");
-
-  if(currentSet && currentSet.id){
-    // Met à jour
-    await supabase.from('sets').update({ title, subject, cards }).eq('id', currentSet.id);
+  const title = document.getElementById('set-title').value;
+  const subject = document.getElementById('set-subject').value;
+  const cards = Array.from(document.querySelectorAll('#cards-editor > div')).map(d => ({question:d.children[0].value, answer:d.children[1].value}));
+  if(currentSet) {
+    const setRef = doc(db, "sets", currentSet.id);
+    await updateDoc(setRef, {title, subject, cards});
   } else {
-    // Crée nouveau set
-    await supabase.from('sets').insert([{ user_id:userData.user.id,title,subject,cards }]);
+    await addDoc(collection(db,"sets"), {title, subject, cards, uid:auth.currentUser.uid});
   }
+  editorScreen.classList.add('hidden');
+  homeScreen.classList.remove('hidden');
   loadSets();
 }
+
+// --- Game ---
+function startGame(set) {
+  currentSet = set;
+  currentCards = [...set.cards];
+  currentIndex = 0;
+  errors = [];
+  homeScreen.classList.add('hidden');
+  gameScreen.classList.remove('hidden');
+  showCard();
+}
+
+function showCard() {
+  const card = currentCards[currentIndex];
+  document.getElementById('card-question').textContent = card.question;
+  document.getElementById('card-answer').textContent = card.answer;
+  document.querySelector(".card").classList.remove("flipped");
+}
+
+function flipCard() { document.querySelector(".card").classList.toggle("flipped"); }
+
+function markAnswer(correct) {
+  if(!correct) errors.push(currentCards[currentIndex]);
+  currentIndex++;
+  if(currentIndex < currentCards.length) showCard();
+  else alert("Fin du set !");
+}
+
+// --- Monitor auth ---
+onAuthStateChanged(auth, user => {
+  if(user) { authScreen.classList.add('hidden'); homeScreen.classList.remove('hidden'); loadSets(); }
+  else { authScreen.classList.remove('hidden'); homeScreen.classList.add('hidden'); }
+});
 </script>
+</head>
+<body>
+<div class="container">
+  <div id="auth-screen">
+    <h2>Connexion / Inscription</h2>
+    <input type="email" id="email" placeholder="Email">
+    <input type="password" id="password" placeholder="Mot de passe">
+    <button onclick="signUp()">S'inscrire</button>
+    <button onclick="signIn()">Se connecter</button>
+  </div>
+
+  <div id="home-screen" class="hidden">
+    <h1>Mes Sets</h1>
+    <button onclick="showSetEditor()">➕ Nouveau set</button>
+    <button onclick="logout()">Déconnexion</button>
+    <div id="sets-list"></div>
+  </div>
+
+  <div id="editor-screen" class="hidden">
+    <h2>Créer / Modifier un Set</h2>
+    <input type="text" id="set-title" placeholder="Titre du set"><br>
+    <input type="text" id="set-subject" placeholder="Matière"><br>
+    <div id="cards-editor"></div>
+    <button onclick="addCardEditor()">➕ Ajouter une carte</button>
+    <button onclick="saveSet()">💾 Sauvegarder</button>
+    <button onclick="homeScreen.classList.remove('hidden');editorScreen.classList.add('hidden');">🏠 Accueil</button>
+  </div>
+
+  <div id="game-screen" class="hidden">
+    <h2 id="game-title"></h2>
+    <div class="card-container">
+      <div class="card" onclick="flipCard()">
+        <div class="card-face card-front">
+          <div id="card-question"></div>
+        </div>
+        <div class="card-face card-back">
+          <div id="card-answer"></div>
+        </div>
+      </div>
+    </div>
+    <div class="answer-buttons">
+      <button class="incorrect" onclick="markAnswer(false)">Mauvais</button>
+      <button class="correct" onclick="markAnswer(true)">Bon</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
